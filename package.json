@@ -1,0 +1,25 @@
+{
+  "name": "mechboard",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "description": "On-screen mechanical keyboard typing test with synthesized Cherry MX sounds.",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc -b",
+    "doctor": "npx react-doctor@latest"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.17",
+    "@types/react-dom": "^19.2.3",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^6.0.3",
+    "vite": "^5.4.10"
+  }
+}
