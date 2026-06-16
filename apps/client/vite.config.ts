@@ -7,4 +7,12 @@ export default defineConfig({
   build: {
     target: "es2020",
   },
+  server: {
+    proxy: {
+      "/ws": {
+        target: "ws://localhost:3000",
+        ws: true,
+      },
+    },
+  },
 });

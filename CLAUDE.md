@@ -7,84 +7,79 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ```bash
 # Root (Turborepo)
 bun install          # install all workspace dependencies
-bun run dev          # start all dev servers via turbo
+bun run dev          # start all dev servers (client + server) via turbo
 bun run build        # production build all apps via turbo
 bun run typecheck    # type-check all workspaces via turbo
 
 # Client app only
 bun run dev:client                     # start client dev server via turbo filter
-cd apps/client && bun run dev          # start Vite dev server directly (http://localhost:5173)
+cd apps/client && bun run dev          # Vite dev server (http://localhost:5173)
 cd apps/client && bun run build        # production build to apps/client/dist/
 cd apps/client && bun run preview      # serve the production build locally
 cd apps/client && bun run typecheck    # type-check with project references (tsc -b)
 cd apps/client && bun run doctor       # run react-doctor diagnostics
+
+# Server app only
+cd apps/server && bun run dev          # watch mode (bun --watch src/index.ts, http://localhost:3000)
+cd apps/server && bun run format       # prettier format
 ```
 
 No test runner or linter is configured.
 
 ## Architecture
 
-This is a **Turborepo monorepo** with bun workspaces.
-
-### Monorepo structure
+**Turborepo monorepo** with Bun workspaces.
 
 ```
 freetyping/
-├── package.json                # Root workspace config (turbo)
-├── turbo.json                  # Turborepo pipeline definitions
-├── tsconfig.json               # Shared base TypeScript config
+├── package.json                # Root workspace config (turbo, bun 1.2.15)
+├── turbo.json                  # Pipeline: dev, build, typecheck, preview
+├── tsconfig.json               # Extends @freetyping/typescript-config/base.json
 ├── apps/
-│   └── client/                 # MechBoard typing test app
-└── packages/                   # Shared packages (future)
+│   ├── client/                 # MechBoard typing test SPA (React 18 + Vite 5 + Tailwind 4)
+│   └── server/                 # Multiplayer WebSocket backend (Bun + Elysia)
+└── packages/
+    ├── ui/                     # @freetyping/ui — shared React components
+    └── typescript-config/      # @freetyping/typescript-config — shared TS configs
 ```
+
+Workspace dependencies use `workspace:*` protocol. Shared TS configs export `base.json`, `vite.json`, `node.json`, and `react-library.json`.
 
 ### Client app (`apps/client`)
 
-**MechBoard** is a single-page typing test app built with React 18 + TypeScript + Vite 5.
+**MechBoard** — single-page typing test with mechanical keyboard sounds, real-time stats, and performance charts.
 
-```
-apps/client/
-├── package.json                # @freetyping/client
-├── tsconfig.json               # Solution-style (references app + node)
-├── tsconfig.app.json           # Extends ../../tsconfig.json, adds jsx
-├── tsconfig.node.json          # Extends ../../tsconfig.json, ES2022
-├── vite.config.ts              # Vite config (react plugin, ES2020 target)
-├── index.html                  # Entry HTML with Google Fonts
-└── src/
-    ├── main.tsx                # React entry point, renders <MechBoard />
-    ├── index.css               # Minimal global reset styles
-    ├── MechBoard.tsx           # Main component (orchestrator)
-    ├── MechBoard.css           # All component styles (Vite CSS pipeline)
-    ├── vite-env.d.ts           # Vite client type reference
-    ├── assets/
-    │   └── sounds/cherry-blue/ # Sound sprite (Vite asset import, content-hashed)
-    ├── components/
-    │   ├── Keyboard.tsx        # On-screen keyboard visualization
-    │   ├── Passage.tsx         # Typing passage with cursor tracking
-    │   ├── ResultsOverlay.tsx  # End-of-test results card
-    │   └── Stat.tsx            # Single stat display (wpm/acc/time)
-    ├── data/
-    │   ├── words.ts            # Word pool + makePassage()
-    │   ├── keyboard-layout.ts  # LAYOUT (KeyDef[][]) for keyboard rendering
-    │   └── sound-map.ts        # SOUND_DEFINES + CODE_TO_SCANCODE mappings
-    ├── hooks/
-    │   └── useKeySound.ts      # Sound preloading + playback via Web Audio API
-    └── state/
-        └── typing-reducer.ts   # useReducer state: TypingState + TypingAction
-```
+- **Entry**: `src/main.tsx` → `<MechBoard />` orchestrator component
+- **State**: `useReducer` in `state/typing-reducer.ts`. Actions: `TYPE_CHAR`, `BACKSPACE`, `TICK`, `RESET`, `SET_DURATION`. Stats (WPM, accuracy, time) derived during render. Snapshots captured every second for charting.
+- **Sound**: Cherry MX Blue sprite preloaded at module level (`hooks/useKeySound.ts`). Web Audio API with per-key mappings via `data/sound-map.ts` (50+ keyboard codes). Decoded on first user interaction.
+- **Keyboard layout**: `data/keyboard-layout.ts` — `KeyDef[][]` mapping `[label, event.code, width?]`. Auto-detects Mac vs PC for modifier keys.
+- **Components**: `Passage.tsx` (text display + animated caret), `Results.tsx` (end-of-test overlay with chart), `Keyboard.tsx` (on-screen keyboard visualization)
+- **Styling**: Tailwind CSS 4 (via `@tailwindcss/vite` plugin). CSS custom properties for theming (`--accent`, `--color-bg`, etc.). Responsive at 720px and 430px. Respects `prefers-reduced-motion`.
+- **Fonts**: JetBrains Mono + Space Grotesk via Google Fonts `<link preconnect>` in `index.html`
 
-### Key internals
+### Server app (`apps/server`)
 
-- **Typing state**: Managed via `useReducer` in `state/typing-reducer.ts`. Actions: `TYPE_CHAR`, `BACKSPACE`, `TICK`, `RESET`, `SET_DURATION`. Stats (wpm, accuracy, time) are derived during render.
-- **Sound**: Cherry MX Blue sound sprite preloaded at module level via Vite asset import (`hooks/useKeySound.ts`). Decoded on first user interaction via Web Audio API.
-- **Keyboard layout**: `LAYOUT` is a typed 2D array (`KeyDef[][]`) mapping `[label, event.code, width?]` per key row. Mac/PC detection for bottom row.
-- **CSS**: Proper `.css` file processed by Vite (minified, content-hashed). Class prefix `mb-` avoids collisions. CSS custom properties for theming (`--accent`). Responsive breakpoints at 720px and 430px. Respects `prefers-reduced-motion`.
-- **Fonts**: Google Fonts (JetBrains Mono, Space Grotesk) loaded via `<link>` in `index.html` with `preconnect` for early fetch.
+**Bun + Elysia** WebSocket backend for multiplayer typing rooms.
 
-### Config
+- **Entry**: `src/index.ts` — Elysia server on port 3000 with `/health` endpoint
+- **WebSocket**: `src/routes/ws.ts` — `POST /ws/:roomId` for WebSocket upgrade. Max 2 clients per room, 30s idle timeout. Broadcasts `{ user, message, timeStamp }` via room channels.
+- **Helpers**: `src/helper.ts` — room ID generation and occupancy tracking
 
-- Root `tsconfig.json` is a shared base config; app tsconfigs extend it
-- `apps/client/tsconfig.json` uses project references: `tsconfig.app.json` (src) + `tsconfig.node.json` (vite.config.ts)
-- `apps/client/vite.config.ts` targets ES2020 for modern output
-- `turbo.json` defines pipelines for `dev`, `build`, `typecheck`, `preview`
-- `.github/workflows/react-doctor.yml` runs React Doctor on PRs (advisory mode)
+### Shared UI package (`packages/ui`)
+
+`@freetyping/ui` — React components consumed by the client:
+- **Button** (primary/outline/ghost variants, active state)
+- **Stat** (label + value display, accent color, md/lg sizes)
+- **ProgressBar** (percentage-based, accent glow)
+- **LineChart** (SVG chart with multiple lines, dashed lines, error dots, hover tooltips)
+- **Card**, **Overlay**
+
+Exported via `src/index.ts`. Uses `peerDependencies` for React 18.
+
+### Key patterns
+
+- **No global state library** — each component tree uses `useReducer` locally
+- **Memoization** — `memo`, `useMemo`, `useCallback` used for render performance (especially `CharSpan` in Passage)
+- **Derived stats** — WPM, raw WPM, accuracy, consistency (coefficient of variation) calculated at render time, not stored in state
+- **TypeScript solution-style configs** — client uses project references (`tsconfig.app.json` + `tsconfig.node.json`), all extending shared configs from `@freetyping/typescript-config`
+- **CI**: `.github/workflows/react-doctor.yml` runs React Doctor on PRs (advisory, non-blocking)

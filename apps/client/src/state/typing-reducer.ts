@@ -22,7 +22,8 @@ export type TypingAction =
   | { type: "BACKSPACE" }
   | { type: "TICK"; now: number }
   | { type: "RESET" }
-  | { type: "SET_DURATION"; duration: number };
+  | { type: "SET_DURATION"; duration: number }
+  | { type: "INIT_RACE"; passage: string; duration: number };
 
 export function makeInitialState(duration = 60): TypingState {
   return {
@@ -88,5 +89,16 @@ export function typingReducer(state: TypingState, action: TypingAction): TypingS
       return makeInitialState(state.duration);
     case "SET_DURATION":
       return makeInitialState(action.duration);
+    case "INIT_RACE":
+      return {
+        text: action.passage,
+        typed: "",
+        started: true,
+        finished: false,
+        startTime: Date.now(),
+        now: Date.now(),
+        duration: action.duration,
+        snapshots: [],
+      };
   }
 }

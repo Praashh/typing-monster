@@ -2,6 +2,7 @@ import { useMemo } from "react";
 import { Button, LineChart } from "@freetyping/ui";
 import type { ChartLine, ErrorDot } from "@freetyping/ui";
 import type { Snapshot } from "../state/typing-reducer";
+import type { RaceResult } from "../hooks/useMultiplayer";
 
 interface ResultsProps {
   wpm: number;
@@ -12,6 +13,8 @@ interface ResultsProps {
   typed: string;
   text: string;
   onReset: () => void;
+  raceResult?: RaceResult | null;
+  myUsername?: string;
 }
 
 function computeConsistency(snapshots: Snapshot[]): number {
@@ -74,6 +77,8 @@ export function Results({
   typed,
   text,
   onReset,
+  raceResult,
+  myUsername,
 }: ResultsProps) {
   const { correct, incorrect, missed } = useMemo(() => {
     let c = 0;
@@ -84,26 +89,71 @@ export function Results({
   const consistency = useMemo(() => computeConsistency(snapshots), [snapshots]);
   const { lines, errors } = useMemo(() => buildChartData(snapshots), [snapshots]);
 
+  const isWinner = raceResult?.winner === myUsername;
+
   return (
     <div className="animate-fade">
-      <div className="flex items-end justify-center gap-12 mb-8">
-        <div className="flex flex-col leading-none">
-          <strong className="text-[64px] font-bold tabular-nums tracking-tight text-accent [text-shadow:0_0_24px_rgba(57,189,248,0.3)]">
-            {wpm}
-          </strong>
-          <span className="text-[10px] text-txt-dim uppercase tracking-[0.16em] font-semibold mt-2">
-            wpm
-          </span>
+      {/* Race result banner */}
+      {raceResult && (
+        <div className="mb-10 text-center">
+          <h2 className="text-4xl font-bold mb-6">
+            {isWinner ? (
+              <span className="text-accent [text-shadow:0_0_24px_rgba(57,189,248,0.4)]">
+                You Won!
+              </span>
+            ) : (
+              <span className="text-bad [text-shadow:0_0_24px_rgba(244,63,94,0.3)]">
+                You Lost
+              </span>
+            )}
+          </h2>
+
+          <div className="flex justify-center gap-6">
+            {raceResult.players.map((p, i) => (
+              <div
+                key={p.username}
+                className={`flex flex-col items-center gap-2 px-6 py-4 rounded-2xl border ${
+                  p.username === myUsername
+                    ? "bg-accent/[0.06] border-accent/30"
+                    : "bg-white/[0.02] border-white/[0.06]"
+                }`}
+              >
+                <span className="text-xs text-txt-dim uppercase tracking-widest font-semibold">
+                  {i === 0 ? "1st" : "2nd"}
+                </span>
+                <span className="text-lg font-bold text-txt">{p.username}</span>
+                <span className="text-3xl font-bold tabular-nums text-accent">
+                  {p.wpm}
+                </span>
+                <span className="text-xs text-txt-dim">wpm</span>
+                <span className="text-sm text-txt tabular-nums">{p.acc}%</span>
+              </div>
+            ))}
+          </div>
         </div>
-        <div className="flex flex-col leading-none pb-1">
-          <strong className="text-[36px] font-bold tabular-nums tracking-tight text-white">
-            {acc}%
-          </strong>
-          <span className="text-[10px] text-txt-dim uppercase tracking-[0.16em] font-semibold mt-2">
-            acc
-          </span>
+      )}
+
+      {/* WPM / acc hero */}
+      {!raceResult && (
+        <div className="flex items-end justify-center gap-12 mb-8">
+          <div className="flex flex-col leading-none">
+            <strong className="text-[64px] font-bold tabular-nums tracking-tight text-accent [text-shadow:0_0_24px_rgba(57,189,248,0.3)]">
+              {wpm}
+            </strong>
+            <span className="text-[10px] text-txt-dim uppercase tracking-[0.16em] font-semibold mt-2">
+              wpm
+            </span>
+          </div>
+          <div className="flex flex-col leading-none pb-1">
+            <strong className="text-[36px] font-bold tabular-nums tracking-tight text-white">
+              {acc}%
+            </strong>
+            <span className="text-[10px] text-txt-dim uppercase tracking-[0.16em] font-semibold mt-2">
+              acc
+            </span>
+          </div>
         </div>
-      </div>
+      )}
 
       <div className="bg-white/[0.02] border border-white/[0.05] rounded-2xl p-4 mb-8">
         <LineChart lines={lines} errors={errors} yLabel="wpm" />
@@ -127,7 +177,9 @@ export function Results({
       </div>
 
       <div className="flex justify-center">
-        <Button onClick={onReset}>next run ⏎</Button>
+        <Button onClick={onReset}>
+          {raceResult ? "back to lobby" : "next run"} ⏎
+        </Button>
       </div>
     </div>
   );
