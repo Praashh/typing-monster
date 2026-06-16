@@ -2,7 +2,6 @@ import { useRef, useCallback } from "react";
 import { SOUND_DEFINES, CODE_TO_SCANCODE } from "../data/sound-map";
 import soundUrl from "../assets/sounds/cherry-blue/sound.ogg";
 
-/** Preload sound sprite at module level — Vite content-hashes the URL */
 let _soundRaw: ArrayBuffer | null = null;
 fetch(soundUrl)
   .then((r) => r.arrayBuffer())

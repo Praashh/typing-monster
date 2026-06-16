@@ -1,4 +1,3 @@
-/** Cherry MX Blue key sound sprite: PC scancode → [offset_ms, duration_ms] in OGG */
 export const SOUND_DEFINES: Record<number, [number, number]> = {
   1:[1203,192],2:[10794,197],3:[11315,196],4:[11814,198],5:[12334,185],
   6:[12845,196],7:[13305,188],8:[13846,187],9:[14362,197],10:[14881,188],
@@ -18,7 +17,6 @@ export const SOUND_DEFINES: Record<number, [number, number]> = {
   3675:[43435,155],3676:[46544,174],3677:[47002,188],
 };
 
-/** Maps KeyboardEvent.code → PC Set 1 scancode */
 export const CODE_TO_SCANCODE: Record<string, number> = {
   Backquote:41,
   Digit1:2,Digit2:3,Digit3:4,Digit4:5,Digit5:6,

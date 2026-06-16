@@ -19,6 +19,9 @@ concurrency:
 jobs:
   react-doctor:
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/client
     steps:
       - uses: actions/checkout@v5
         with:
