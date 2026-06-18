@@ -1,0 +1,12 @@
+{
+  "name": "@freetyping/typescript-config",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    "./base.json": "./base.json",
+    "./react-library.json": "./react-library.json",
+    "./vite.json": "./vite.json",
+    "./node.json": "./node.json"
+  }
+}

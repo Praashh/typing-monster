@@ -1,1 +1,0 @@
-{"root":["./src/mechboard.tsx","./src/main.tsx","./src/vite-env.d.ts","./src/components/keyboard.tsx","./src/components/passage.tsx","./src/components/resultsoverlay.tsx","./src/components/stat.tsx","./src/data/keyboard-layout.ts","./src/data/sound-map.ts","./src/data/words.ts","./src/hooks/usekeysound.ts","./src/state/typing-reducer.ts"],"version":"6.0.3"}

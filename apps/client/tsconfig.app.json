@@ -1,0 +1,4 @@
+{
+  "extends": "@freetyping/typescript-config/vite.json",
+  "include": ["src"]
+}
