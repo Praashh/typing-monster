@@ -1,18 +1,19 @@
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import tailwindcss from "@tailwindcss/vite";
+import { defineConfig, loadEnv } from 'vite';
+import react from '@vitejs/plugin-react';
+import tailwindcss from '@tailwindcss/vite';
 
-export default defineConfig({
-  plugins: [tailwindcss(), react()],
-  build: {
-    target: "es2020",
-  },
-  server: {
-    proxy: {
-      "/ws": {
-        target: "ws://localhost:3000",
-        ws: true,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, process.cwd(), '');
+
+  return {
+    plugins: [react(), tailwindcss()],
+    server: {
+      proxy: {
+        "/ws": {
+          target: env.VITE_WS_URL,
+          ws: true,
+        },
       },
     },
-  },
+  };
 });

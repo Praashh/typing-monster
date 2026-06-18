@@ -54,7 +54,10 @@ const wsRoutes = new Elysia({
         }
         if (room.phase !== "waiting") {
           ws.send(
-            JSON.stringify({ type: "error", message: "Race already in progress" })
+            JSON.stringify({
+              type: "error",
+              message: "Race already in progress",
+            }),
           );
           return;
         }
@@ -78,7 +81,9 @@ const wsRoutes = new Elysia({
           playerCount: room.players.size,
         });
 
-        console.log(`${data.username} joined room ${roomId} (${room.players.size}/2)`);
+        console.log(
+          `${data.username} joined room ${roomId} (${room.players.size}/2)`,
+        );
         break;
       }
 
@@ -88,7 +93,10 @@ const wsRoutes = new Elysia({
 
         if (room.players.size < 2) {
           ws.send(
-            JSON.stringify({ type: "error", message: "Need 2 players to start" })
+            JSON.stringify({
+              type: "error",
+              message: "Need 2 players to start",
+            }),
           );
           return;
         }
@@ -182,14 +190,19 @@ const wsRoutes = new Elysia({
           // Allow rematch
           room.phase = "waiting";
           room.passage = null;
-          console.log(`Room ${roomId} race finished — winner: ${sorted[0].username}`);
+          console.log(
+            `Room ${roomId} race finished — winner: ${sorted[0].username}`,
+          );
         }
         break;
       }
 
       default:
         ws.send(
-          JSON.stringify({ type: "error", message: `Unknown message type: ${data.type}` })
+          JSON.stringify({
+            type: "error",
+            message: `Unknown message type: ${data.type}`,
+          }),
         );
     }
   },
