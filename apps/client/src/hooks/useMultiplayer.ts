@@ -62,8 +62,10 @@ export function useMultiplayer() {
       // Close any existing connection
       wsRef.current?.close();
 
-      const protocol = location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${protocol}//${location.host}/ws/${roomId}`);
+      const wsBase = import.meta.env.VITE_WS_URL
+        ? import.meta.env.VITE_WS_URL.replace(/^http/, "ws")
+        : `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
+      const ws = new WebSocket(`${wsBase}/ws/${roomId}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
