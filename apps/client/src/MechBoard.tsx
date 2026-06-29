@@ -8,16 +8,21 @@ import { Passage } from "./components/Passage";
 import { Results } from "./components/Results";
 import { Lobby } from "./components/Lobby";
 import { OpponentBar } from "./components/OpponentBar";
+import { ProfileModal } from "./components/ProfileModal";
+import { useHistory } from "./hooks/useHistory";
 
 const DURATIONS = [15, 30, 60, 120] as const;
 
 export default function MechBoard() {
-  const [mode, setMode] = useState<"solo" | "multi">("solo");
+  const initialRoom = useMemo(() => new URLSearchParams(window.location.search).get("room"), []);
+  const [mode, setMode] = useState<"solo" | "multi">(initialRoom ? "multi" : "solo");
+  const [showProfile, setShowProfile] = useState(false);
   const [state, dispatch] = useReducer(typingReducer, 60, makeInitialState);
   const { text, typed, started, finished, startTime, now, duration, snapshots } = state;
 
   const playSound = useKeySound();
   const multi = useMultiplayer();
+  const { history, addEntry } = useHistory();
 
   const reset = useCallback(() => {
     dispatch({ type: "RESET" });
@@ -54,6 +59,11 @@ export default function MechBoard() {
     const down = (e: KeyboardEvent) => {
       playSound(e.code);
       if (e.code === "Tab") e.preventDefault();
+      if (e.key === "Shift") {
+        e.preventDefault();
+        dispatch({ type: "SKIP_WORD" });
+        return;
+      }
       if (e.key === "Backspace") {
         e.preventDefault();
         dispatch({ type: "BACKSPACE" });
@@ -112,19 +122,63 @@ export default function MechBoard() {
     if (mode === "multi" && finished && !sentFinishRef.current) {
       sentFinishRef.current = true;
       const elapsedMs = startTime ? Date.now() - startTime : 0;
-      multi.sendFinished({
+      multi.sendFinish(
         wpm,
         acc,
-        elapsed: Math.round(elapsedMs / 1000),
-      });
+        rawWpm,
+        Math.round(elapsedMs / 1000),
+        typed,
+        snapshots
+      );
     }
     if (!finished) sentFinishRef.current = false;
-  }, [mode, finished, wpm, acc, startTime, multi.sendFinished]);
+  }, [mode, finished, wpm, acc, rawWpm, startTime, typed, snapshots, multi.sendFinish]);
+
+  // Save solo result to history
+  const savedSoloRef = useRef(false);
+  useEffect(() => {
+    if (mode === "solo" && finished && !savedSoloRef.current) {
+      savedSoloRef.current = true;
+      
+      let c = 0, inc = 0, s = 0;
+      for (let i = 0; i < typed.length; i++) {
+        if (typed[i] === '-') s++;
+        else if (typed[i] === text[i]) c++;
+        else inc++;
+      }
+      
+      let consistency = 100;
+      if (snapshots.length >= 2) {
+        const perSec: number[] = [];
+        for (let i = 0; i < snapshots.length; i++) {
+          const prev = i > 0 ? snapshots[i - 1] : { elapsed: 0, totalCorrect: 0 };
+          const dt = (snapshots[i].elapsed - prev.elapsed) / 60;
+          if (dt > 0) {
+            perSec.push((snapshots[i].totalCorrect - prev.totalCorrect) / 5 / dt);
+          }
+        }
+        if (perSec.length >= 2) {
+          const mean = perSec.reduce((a, b) => a + b, 0) / perSec.length;
+          if (mean > 0) {
+            const variance = perSec.reduce((a, b) => a + (b - mean) ** 2, 0) / perSec.length;
+            const cv = (Math.sqrt(variance) / mean) * 100;
+            consistency = Math.max(0, Math.round(100 - cv));
+          } else {
+            consistency = 0;
+          }
+        }
+      }
+
+      addEntry(wpm, acc, rawWpm, duration, consistency, c, inc, s, typed.length);
+    }
+    if (!finished) savedSoloRef.current = false;
+  }, [mode, finished, wpm, acc, rawWpm, duration, typed, text, snapshots, addEntry]);
 
   // When race result comes back, go to finished state
   const handleRaceReset = useCallback(() => {
     dispatch({ type: "RESET" });
-  }, []);
+    multi.backToLobby();
+  }, [multi]);
 
   // Determine what to show
   const showLobby =
@@ -136,32 +190,37 @@ export default function MechBoard() {
 
   return (
     <div
-      className="font-sans min-h-full text-txt px-5 py-12 box-border flex flex-col justify-center items-center"
+      className="font-sans min-h-full text-txt px-5 pt-[6vh] pb-12 box-border flex flex-col items-center"
       style={{
         background:
           "radial-gradient(1300px 700px at 50% -10%, rgba(57,189,248,0.08), transparent 60%), radial-gradient(800px 400px at 50% 50%, rgba(57,189,248,0.02), transparent 50%), var(--color-bg)",
       }}
     >
-      <div className="w-full max-w-[900px]">
-        <header className="flex justify-between items-center gap-4 flex-wrap mb-9 border-b border-white/[0.03] pb-5">
-          <div className="flex items-center gap-3.5">
-            <span
-              className="w-9 h-9 rounded-[10px] flex-none relative"
-              style={{
-                background: "linear-gradient(180deg, var(--color-cap-top), var(--color-cap-bot))",
-                boxShadow:
-                  "0 1px 0 var(--color-cap-edge) inset, 0 -3px 0 var(--color-cap-shadow) inset, 0 0 16px rgba(57,189,248,0.35), 0 0 0 1px var(--color-accent)",
-              }}
-            >
-              <span className="absolute inset-[10px] rounded bg-accent opacity-95 shadow-[0_0_14px_var(--color-accent)]" />
-            </span>
+      <div className={`w-full transition-all duration-500 ${finished ? "max-w-[1100px] 2xl:max-w-[1600px]" : "max-w-[900px] 2xl:max-w-[1200px]"}`}>
+        <header className="flex flex-col sm:flex-row justify-between items-center gap-6 sm:gap-4 flex-wrap mb-6 sm:mb-9 border-b border-white/[0.03] pb-5">
+          <button 
+            className="flex items-center gap-3.5 cursor-pointer text-left bg-transparent border-0 p-0 m-0 hover:opacity-80 transition-opacity outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-xl"
+            onClick={() => {
+              if (mode !== "solo") goSolo();
+              else reset();
+            }}
+            title="Go to Home"
+          >
+            <img 
+              src="/logo.jpg" 
+              alt="MechBoard Logo" 
+              className="w-10 h-10 rounded-xl object-cover shadow-[0_0_16px_rgba(57,189,248,0.2)]" 
+            />
             <div>
               <h1 className="text-[22px] font-bold tracking-tight">MechBoard</h1>
               <p className="mt-0.5 text-xs text-txt-dim tracking-wide">type to feel the click</p>
             </div>
-          </div>
+          </button>
 
           <div className="flex items-center gap-4">
+            <Button variant="ghost" onClick={() => setShowProfile(true)} className="text-txt-dim hover:text-white">
+              Profile
+            </Button>
             {/* Mode toggle */}
             <fieldset className="flex gap-2 border-0 p-0 m-0" aria-label="Mode">
               <Button
@@ -185,22 +244,20 @@ export default function MechBoard() {
               </Button>
             </fieldset>
 
-            {/* Duration selector — only in solo mode */}
-            {mode === "solo" && (
-              <fieldset className="flex gap-2 border-0 p-0 m-0" aria-label="Test duration">
-                {DURATIONS.map((d) => (
-                  <Button
-                    key={d}
-                    variant="outline"
-                    active={duration === d}
-                    onClick={() => dispatch({ type: "SET_DURATION", duration: d })}
-                    disabled={started && !finished}
-                  >
-                    {d}s
-                  </Button>
-                ))}
-              </fieldset>
-            )}
+            {/* Duration selector — always show */}
+            <fieldset className="flex gap-2 border-0 p-0 m-0" aria-label="Test duration">
+              {DURATIONS.map((d) => (
+                <Button
+                  key={d}
+                  variant="outline"
+                  active={duration === d}
+                  onClick={() => dispatch({ type: "SET_DURATION", duration: d })}
+                  disabled={started && !finished}
+                >
+                  {d}s
+                </Button>
+              ))}
+            </fieldset>
           </div>
         </header>
 
@@ -208,11 +265,13 @@ export default function MechBoard() {
         {showLobby && (
           <Lobby
             phase={multi.phase}
+            isCreator={multi.isCreator}
             players={multi.players}
             countdown={multi.countdown}
             error={multi.error}
+            initialRoom={multi.roomId || initialRoom}
             onJoin={multi.joinRoom}
-            onStart={multi.startRace}
+            onStart={() => multi.startRace(duration)}
             onLeave={goSolo}
           />
         )}
@@ -221,7 +280,7 @@ export default function MechBoard() {
         {showTypingUI && (
           <>
             {/* Opponent bar during multiplayer race */}
-            {mode === "multi" && multi.opponent && (
+            {mode === "multi" && multi.opponent && !finished && (
               <OpponentBar opponent={multi.opponent} />
             )}
 
@@ -237,6 +296,8 @@ export default function MechBoard() {
                 onReset={mode === "multi" ? handleRaceReset : reset}
                 raceResult={mode === "multi" ? multi.raceResult : undefined}
                 myUsername={mode === "multi" ? multi.username : undefined}
+                isCreator={mode === "multi" ? multi.isCreator : undefined}
+                onRaceAgain={() => multi.startRace(duration)}
               />
             ) : (
               <>
@@ -270,6 +331,10 @@ export default function MechBoard() {
           </>
         )}
       </div>
+
+      {showProfile && (
+        <ProfileModal history={history} onClose={() => setShowProfile(false)} />
+      )}
     </div>
   );
 }

@@ -95,7 +95,7 @@ export function Passage({ text, typed, finished }: PassageProps) {
   return (
     <div
       ref={containerRef}
-      className="text-center font-mono text-[1.7rem] leading-[3rem] tracking-tight whitespace-normal break-normal bg-transparent border-none p-0 h-[calc(3rem*3)] overflow-hidden select-none relative my-9 max-md:text-[1.3rem] max-md:leading-[2.2rem] max-md:h-[calc(2.2rem*3)] max-md:my-6 max-sm:text-[1.15rem] max-sm:leading-[1.8rem] max-sm:h-[calc(1.8rem*3)]"
+      className="text-center font-mono text-[1.7rem] 2xl:text-[2.25rem] leading-[3rem] 2xl:leading-[4rem] tracking-tight whitespace-normal break-normal bg-transparent border-none p-0 h-[calc(3rem*3)] 2xl:h-[calc(4rem*3)] overflow-hidden select-none relative my-9 max-md:text-[1.3rem] max-md:leading-[2.2rem] max-md:h-[calc(2.2rem*3)] max-md:my-6 max-sm:text-[1.15rem] max-sm:leading-[1.8rem] max-sm:h-[calc(1.8rem*3)]"
       aria-label="Typing passage"
     >
       {!finished && caretPos.height > 0 && (

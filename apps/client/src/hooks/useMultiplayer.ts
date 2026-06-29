@@ -1,5 +1,44 @@
 import { useRef, useState, useCallback, useEffect } from "react";
 
+let sharedAudioContext: AudioContext | null = null;
+export function playCountdownBeep(type: "tick" | "go") {
+  try {
+    if (!sharedAudioContext) {
+      const AC = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AC) return;
+      sharedAudioContext = new AC();
+    }
+    const ac = sharedAudioContext;
+    if (ac.state === "suspended") ac.resume();
+
+    const osc = ac.createOscillator();
+    const gain = ac.createGain();
+    const filter = ac.createBiquadFilter();
+    
+    // Retro arcade racing style: square wave with a lowpass filter
+    osc.type = "square";
+    osc.frequency.setValueAtTime(type === "tick" ? 392.0 : 784.0, ac.currentTime);
+    
+    filter.type = "lowpass";
+    filter.frequency.setValueAtTime(2000, ac.currentTime);
+    
+    // Simple decay envelope that won't throw overlap errors
+    gain.gain.setValueAtTime(0.3, ac.currentTime);
+    
+    const duration = type === "tick" ? 0.15 : 0.5;
+    gain.gain.exponentialRampToValueAtTime(0.001, ac.currentTime + duration);
+    
+    osc.connect(filter);
+    filter.connect(gain);
+    gain.connect(ac.destination);
+    
+    osc.start(ac.currentTime);
+    osc.stop(ac.currentTime + duration);
+  } catch (e) {
+    console.error("Audio beep error:", e);
+  }
+}
+
 export type MultiplayerPhase = "idle" | "lobby" | "countdown" | "racing" | "finished";
 
 export interface OpponentStats {
@@ -12,7 +51,7 @@ export interface OpponentStats {
 
 export interface RaceResult {
   winner: string;
-  players: Array<{ username: string; wpm: number; acc: number; elapsed: number }>;
+  players: Array<{ username: string; wpm: number; acc: number; rawWpm: number; elapsed: number; typed: string; snapshots: any[] }>;
 }
 
 const INITIAL_OPPONENT: OpponentStats = {
@@ -25,10 +64,12 @@ const INITIAL_OPPONENT: OpponentStats = {
 
 export function useMultiplayer() {
   const [phase, setPhase] = useState<MultiplayerPhase>("idle");
+  const [roomId, setRoomId] = useState<string | null>(null);
   const [players, setPlayers] = useState<string[]>([]);
   const [countdown, setCountdown] = useState<number | null>(null);
   const [passage, setPassage] = useState<string | null>(null);
   const [duration, setDuration] = useState(60);
+  const [isCreator, setIsCreator] = useState(false);
   const [opponent, setOpponent] = useState<OpponentStats | null>(null);
   const [raceResult, setRaceResult] = useState<RaceResult | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -46,6 +87,7 @@ export function useMultiplayer() {
   const disconnect = useCallback(() => {
     wsRef.current?.close();
     wsRef.current = null;
+    setRoomId(null);
     setPhase("idle");
     setPlayers([]);
     setCountdown(null);
@@ -56,16 +98,22 @@ export function useMultiplayer() {
   }, []);
 
   const joinRoom = useCallback(
-    (roomId: string, username: string) => {
+    (newRoomId: string, username: string) => {
+      setRoomId(newRoomId);
       usernameRef.current = username;
 
       // Close any existing connection
       wsRef.current?.close();
 
-      const wsBase = import.meta.env.VITE_WS_URL
-        ? import.meta.env.VITE_WS_URL.replace(/^http/, "ws")
-        : `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
-      const ws = new WebSocket(`${wsBase}/ws/${roomId}`);
+      let wsBase = "";
+      if (import.meta.env.VITE_WS_URL) {
+        wsBase = import.meta.env.VITE_WS_URL.replace(/^http/, "ws");
+      } else if (import.meta.env.DEV) {
+        wsBase = "ws://localhost:3000";
+      } else {
+        wsBase = `${location.protocol === "https:" ? "wss:" : "ws:"}//${location.host}`;
+      }
+      const ws = new WebSocket(`${wsBase}/ws/${newRoomId}`);
       wsRef.current = ws;
 
       ws.onopen = () => {
@@ -91,10 +139,14 @@ export function useMultiplayer() {
 
         switch (msg.type) {
           case "room_joined": {
+            if (msg.username) {
+              usernameRef.current = msg.username;
+            }
             const self = usernameRef.current;
             const opponentName = msg.players.find((p: string) => p !== self);
             setPhase("lobby");
             setPlayers(msg.players);
+            setIsCreator(msg.isCreator);
             setRaceResult(null);
             setError(null);
             if (opponentName) {
@@ -120,11 +172,15 @@ export function useMultiplayer() {
               setPassage(null);
               setCountdown(null);
             }
+            if (msg.newCreator === usernameRef.current) {
+              setIsCreator(true);
+            }
             break;
 
           case "countdown":
             setPhase("countdown");
             setCountdown(msg.value);
+            playCountdownBeep("tick");
             break;
 
           case "race_go":
@@ -133,6 +189,7 @@ export function useMultiplayer() {
             setDuration(msg.duration);
             setCountdown(null);
             setRaceResult(null);
+            playCountdownBeep("go");
             setOpponent((o) =>
               o ? { ...o, wpm: 0, acc: 100, errors: 0, progress: 0 } : null
             );
@@ -142,12 +199,12 @@ export function useMultiplayer() {
             setOpponent((o) =>
               o
                 ? {
-                    ...o,
-                    wpm: msg.wpm,
-                    acc: msg.acc,
-                    errors: msg.errors,
-                    progress: msg.progress,
-                  }
+                  ...o,
+                  wpm: msg.wpm,
+                  acc: msg.acc,
+                  errors: msg.errors,
+                  progress: msg.progress,
+                }
                 : null
             );
             break;
@@ -173,8 +230,8 @@ export function useMultiplayer() {
     []
   );
 
-  const startRace = useCallback(() => {
-    send({ type: "start_race" });
+  const startRace = useCallback((duration: number = 60) => {
+    send({ type: "start_race", duration });
   }, [send]);
 
   const sendProgress = useCallback(
@@ -184,12 +241,16 @@ export function useMultiplayer() {
     [send]
   );
 
-  const sendFinished = useCallback(
-    (stats: { wpm: number; acc: number; elapsed: number }) => {
-      send({ type: "finished", ...stats });
-    },
-    [send]
-  );
+  const sendFinish = useCallback((wpm: number, acc: number, rawWpm: number, elapsed: number, typed: string, snapshots: any[]) => {
+    send({ type: "finished", wpm, acc, rawWpm, elapsed, typed, snapshots });
+  }, [send]);
+
+  const backToLobby = useCallback(() => {
+    setPhase("lobby");
+    setRaceResult(null);
+    setPassage(null);
+    setOpponent((o) => (o ? { ...o, wpm: 0, acc: 100, errors: 0, progress: 0 } : null));
+  }, []);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -200,6 +261,7 @@ export function useMultiplayer() {
 
   return {
     phase,
+    roomId,
     players,
     countdown,
     passage,
@@ -207,11 +269,13 @@ export function useMultiplayer() {
     opponent,
     raceResult,
     error,
+    isCreator,
     username: usernameRef.current,
     joinRoom,
     startRace,
     sendProgress,
-    sendFinished,
+    sendFinish,
+    backToLobby,
     disconnect,
   };
 }
