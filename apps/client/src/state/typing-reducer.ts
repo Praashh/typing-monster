@@ -23,7 +23,8 @@ export type TypingAction =
   | { type: "TICK"; now: number }
   | { type: "RESET" }
   | { type: "SET_DURATION"; duration: number }
-  | { type: "INIT_RACE"; passage: string; duration: number };
+  | { type: "INIT_RACE"; passage: string; duration: number }
+  | { type: "SKIP_WORD" };
 
 export function makeInitialState(duration = 60): TypingState {
   return {
@@ -48,7 +49,14 @@ export function typingReducer(state: TypingState, action: TypingAction): TypingS
   switch (action.type) {
     case "TYPE_CHAR": {
       if (state.finished) return state;
-      const typed = state.typed.length >= state.text.length ? state.typed : state.typed + action.key;
+      
+      let key = action.key;
+      const targetChar = state.text[state.typed.length];
+      if (targetChar && key.toLowerCase() === targetChar.toLowerCase()) {
+        key = targetChar;
+      }
+      
+      const typed = state.typed.length >= state.text.length ? state.typed : state.typed + key;
       if (!state.started) {
         return { ...state, typed, started: true, startTime: action.time };
       }
@@ -57,6 +65,19 @@ export function typingReducer(state: TypingState, action: TypingAction): TypingS
     case "BACKSPACE":
       if (state.finished) return state;
       return { ...state, typed: state.typed.slice(0, -1) };
+    case "SKIP_WORD": {
+      if (state.finished || !state.started) return state;
+      const currentIdx = state.typed.length;
+      if (currentIdx >= state.text.length) return state;
+      const nextSpaceIdx = state.text.indexOf(" ", currentIdx);
+      if (nextSpaceIdx !== -1) {
+        const skippedLength = nextSpaceIdx - currentIdx;
+        return { ...state, typed: state.typed + "-".repeat(skippedLength) + " " };
+      } else {
+        const skippedLength = state.text.length - currentIdx;
+        return { ...state, typed: state.typed + "-".repeat(skippedLength) };
+      }
+    }
     case "TICK": {
       if (!state.started || state.finished) return state;
       const elapsed = action.now - state.startTime;

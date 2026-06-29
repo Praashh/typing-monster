@@ -200,7 +200,7 @@ export function LineChart({
       )}
 
       {lines.map((l, i) => {
-        const lx = PAD.left + 8 + i * 80;
+        const lx = PAD.left + 8 + i * 140;
         return (
           <g key={`legend-${i}`}>
             <line

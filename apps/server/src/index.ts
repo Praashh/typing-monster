@@ -19,16 +19,14 @@ new Elysia()
         try {
           const res = await fetch(`${env.BASE_URL}/health`);
           if (res.status !== 200) {
-            console.log(`Server is not healthy ${res.statusText}`);
           } else {
-            console.log(`Server is healthy ${res.statusText}`);
           }
         } catch (error) {
-          console.log(error);
+          // Silent catch
         }
       },
     }),
   )
   .use(wsRouter)
   .get("/health", () => "Server is healthy")
-  .listen(3000, () => console.log("Server running on http://localhost:3000"));
+  .listen(3000);

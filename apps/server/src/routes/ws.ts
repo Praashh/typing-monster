@@ -16,13 +16,7 @@ function getRoomId(ws: any): string {
 }
 
 function findPlayerIdByWs(roomId: string, ws: any): string | undefined {
-  const room = rooms.get(roomId);
-  if (!room) return undefined;
-  for (const [id, p] of room.players) {
-    if (p.ws === ws) return id;
-  }
-  // Fallback to WeakMap
-  return wsPlayerIds.get(ws);
+  return ws.data.playerId;
 }
 
 const wsRoutes = new Elysia({
@@ -30,7 +24,6 @@ const wsRoutes = new Elysia({
   websocket: { idleTimeout: 120 },
 }).ws("/:roomId", {
   open(ws) {
-    console.log(`WS connected for room ${getRoomId(ws)}`);
   },
 
   message(ws, raw) {
@@ -63,33 +56,44 @@ const wsRoutes = new Elysia({
         }
 
         const playerId = nextId();
+        ws.data.playerId = playerId;
+        if (!room.creatorId) room.creatorId = playerId;
+
+        let baseUsername = data.username || `Player ${playerId}`;
+        let finalUsername = baseUsername;
+        let counter = 1;
+        const existingNames = new Set([...room.players.values()].map(p => p.username));
+        while (existingNames.has(finalUsername)) {
+           finalUsername = `${baseUsername} (${counter})`;
+           counter++;
+        }
+
         room.players.set(playerId, {
           id: playerId,
-          username: data.username || `Player ${playerId}`,
+          username: finalUsername,
           ws,
           finished: false,
         });
-        wsPlayerIds.set(ws, playerId);
 
         const players = [...room.players.values()].map((p) => p.username);
 
-        ws.send(JSON.stringify({ type: "room_joined", playerId, players }));
+        ws.send(JSON.stringify({ type: "room_joined", playerId, players, isCreator: room.creatorId === playerId, username: finalUsername }));
 
         sendToOpponents(room, playerId, {
           type: "player_joined",
-          username: data.username,
+          username: finalUsername,
           playerCount: room.players.size,
         });
 
-        console.log(
-          `${data.username} joined room ${roomId} (${room.players.size}/2)`,
-        );
         break;
       }
 
       case "start_race": {
         const room = rooms.get(roomId);
         if (!room || room.phase !== "waiting") return;
+        
+        const playerId = findPlayerIdByWs(roomId, ws);
+        if (room.creatorId !== playerId) return;
 
         if (room.players.size < 2) {
           ws.send(
@@ -102,7 +106,8 @@ const wsRoutes = new Elysia({
         }
 
         room.phase = "countdown";
-        room.passage = makePassage(50);
+        room.duration = data.duration || 60;
+        room.passage = makePassage(400);
         room.finishResults = [];
 
         for (const p of room.players.values()) {
@@ -124,7 +129,6 @@ const wsRoutes = new Elysia({
                 passage: room.passage,
                 duration: room.duration,
               });
-              console.log(`Room ${roomId} race started`);
             }, 1000);
           }
         };
@@ -161,13 +165,21 @@ const wsRoutes = new Elysia({
 
         player.finished = true;
         player.finishData = {
-          wpm: data.wpm ?? 0,
-          acc: data.acc ?? 0,
-          elapsed: data.elapsed ?? 0,
+          wpm: data.wpm,
+          acc: data.acc,
+          rawWpm: data.rawWpm,
+          elapsed: data.elapsed,
+          typed: data.typed,
+          snapshots: data.snapshots,
         };
         room.finishResults.push({
           username: player.username,
-          ...player.finishData,
+          wpm: data.wpm,
+          acc: data.acc,
+          rawWpm: data.rawWpm,
+          elapsed: data.elapsed,
+          typed: data.typed,
+          snapshots: data.snapshots,
         });
 
         broadcast(room, {
@@ -190,9 +202,6 @@ const wsRoutes = new Elysia({
           // Allow rematch
           room.phase = "waiting";
           room.passage = null;
-          console.log(
-            `Room ${roomId} race finished — winner: ${sorted[0].username}`,
-          );
         }
         break;
       }
@@ -235,10 +244,9 @@ const wsRoutes = new Elysia({
         type: "player_left",
         username,
         playerCount: remaining.players.size,
+        newCreator: remaining.players.get(remaining.creatorId!)?.username,
       });
     }
-
-    console.log(`${username} left room ${roomId}`);
   },
 });
 

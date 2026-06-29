@@ -21,7 +21,7 @@ const variants: Record<Variant, string> = {
 
 const activeStyles: Partial<Record<Variant, string>> = {
   outline:
-    "text-accent border-accent bg-accent/[0.08] shadow-[0_0_12px_rgba(57,189,248,0.25)]",
+    "!text-accent !border-accent !bg-accent/[0.08] shadow-[0_0_12px_rgba(57,189,248,0.3)]",
 };
 
 export function Button({
